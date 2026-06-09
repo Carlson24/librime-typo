@@ -6,8 +6,7 @@
 #include <rime/translation.h>
 #include <rime/translator.h>
 #include <rime/config.h>
-
-#include <unordered_map>
+#include <marisa.h>
 #include <string>
 
 namespace rime {
@@ -21,17 +20,17 @@ class TypoFilter : public Filter {
                                 CandidateList* candidates) override;
 
  private:
-  std::string GetCorrectedInput(const std::string& input, int& correction_count, size_t& max_correction_len) const;
+  std::string GetCorrectedInput(const std::string& input, int& correction_count, size_t& max_correction_len, const std::string& segment_tag, bool is_pinyin) const;
   void LoadCorrections(Engine* engine, const std::string& input_type, const std::string& custom_file);
   std::string DetectInputType(Config* config) const;
 
-  std::unordered_map<std::string, std::string> correction_map_;
-  size_t min_depth_ = 0;
-  size_t max_depth_ = 0;
+  marisa::Trie trie_;
+  bool trie_loaded_ = false;
+  
   std::string current_key_ = "";
   
   bool is_enabled_ = false;
-  bool show_corrected_preedit_ = false; // 默认 false: 启用等价位置替换
+  bool show_corrected_preedit_ = false;
   an<Translator> translator_;
 };
 
@@ -44,7 +43,7 @@ class TypoTranslation : public Translation {
                   bool exclusive_override,
                   bool show_corrected_preedit,
                   const std::string& original_preedit,
-                  const std::string& raw_segment); // 传入实际敲击的纯字母片段
+                  const std::string& raw_segment);
   virtual ~TypoTranslation() = default;
 
   virtual bool Next() override;
