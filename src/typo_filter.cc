@@ -1,22 +1,26 @@
 // Copyright (c) 2026 amzxyz <rcm@qq.com>. All rights reserved.
 // Licensed under BSD 3-Clause License.
 
-#include "typo_filter.h"
-#include <rime/engine.h>
+#include <rime/common.h>
 #include <rime/context.h>
+#include <rime/engine.h>
 #include <rime/schema.h>
 #include <rime/candidate.h>
 #include <rime/gear/translator_commons.h>
 #include <rime/service.h>
-#include <rime/common.h>
+
 #include <fstream>
 #include <algorithm>
+
 #include <sys/stat.h>
 #include <sys/types.h>
 #ifdef _WIN32
 #include <direct.h>
 #endif
+
 #include <marisa.h>
+
+#include "typo_filter.h"
 
 namespace rime {
 
@@ -38,9 +42,11 @@ class WeightedTypoTranslation : public Translation {
 public:
   WeightedTypoTranslation(an<Translation> original, an<Translation> corrected, size_t start, size_t end,
                           int mode, bool show_preedit, const std::string& orig_preedit,
-                          const std::string& raw_seg, const std::string& delimiters)
+                          const std::string& raw_seg, const std::string& delimiters,
+                          const std::string& hint)
       : original_(original), corrected_(corrected), start_(start), end_(end), mode_(mode),
-        show_preedit_(show_preedit), orig_preedit_(orig_preedit), raw_seg_(raw_seg), delimiters_(delimiters) {
+        show_preedit_(show_preedit), orig_preedit_(orig_preedit), raw_seg_(raw_seg), delimiters_(delimiters),
+        hint_(hint) {
     if (mode_ == 2) {
       state_ = State::kExclusive;
       original_ = nullptr;
@@ -169,7 +175,7 @@ private:
       cand->set_quality(c->quality());
       return cand;
     } else {
-      auto cand = New<TypoShadowCandidate>(c, "typo", c->text(), " 💡", false, final_preedit);
+      auto cand = New<TypoShadowCandidate>(c, "typo", c->text(), hint_, false, final_preedit);
       cand->set_quality(c->quality());
       return cand;
     }
@@ -179,7 +185,7 @@ private:
   size_t start_, end_;
   int mode_;
   bool show_preedit_;
-  std::string orig_preedit_, raw_seg_, delimiters_;
+  std::string orig_preedit_, raw_seg_, delimiters_, hint_;
   State state_;
 };
 
@@ -194,6 +200,7 @@ TypoFilter::TypoFilter(const Ticket& ticket) : Filter(ticket) {
   if (!ticket.engine || !ticket.schema || !ticket.schema->config()) return;
   Config* config = ticket.schema->config();
   config->GetBool("typo/show_corrected_preedit", &show_corrected_preedit_);
+  config->GetString("typo/correction_hint", &correction_hint_);
   std::string translator_ns = "translator";
   config->GetString("typo/translator", &translator_ns);
 
@@ -249,37 +256,45 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
   trie_loaded_ = false;
   trie_.clear();
 
-  std::string user_dir = Service::instance().deployer().user_data_dir.string();
-  std::string shared_dir = Service::instance().deployer().shared_data_dir.string();
+  const auto& deployer = Service::instance().deployer();
+  std::string user_dir = deployer.user_data_dir.string();
+  std::string shared_dir = deployer.shared_data_dir.string();
 
   std::string user_txt = user_dir + "/" + base_name + ".txt";
   std::string user_bin = user_dir + "/build/" + base_name + ".bin";
-  std::string shared_bin = shared_dir + "/build/typo_" + input_type + ".bin";
+  std::string shared_txt = shared_dir + "/" + base_name + ".txt";
+  std::string shared_bin = shared_dir + "/build/" + base_name + ".bin";
 
-  if (IsTxtNewerThanBin(user_txt, user_bin)) {
-    LOG(INFO) << "TypoFilter: JIT Compiling user dictionary: " << user_txt;
-    std::ifstream file(user_txt);
-    if (file.is_open()) {
-      marisa::Keyset keyset;
-      std::string line;
-      while (std::getline(file, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        size_t tab_pos = line.find('\t');
-        if (tab_pos != std::string::npos) {
-          std::string typo = line.substr(0, tab_pos);
-          std::string corrected = line.substr(tab_pos + 1);
-          if (!corrected.empty() && corrected.back() == '\r') corrected.pop_back();
-          if (!typo.empty() && typo.back() == '\r') typo.pop_back();
-          if (!typo.empty() && !corrected.empty()) {
-            std::string merged_key = typo + "\t" + corrected;
-            keyset.push_back(merged_key.c_str(), merged_key.length());
+  auto jit_compile =
+      [&](const std::string& txt_path, const std::string& bin_path,
+          const std::string& label) {
+        LOG(INFO) << "TypoFilter: JIT Compiling " << label
+                  << " dictionary: " << txt_path;
+        std::ifstream file(txt_path);
+        if (!file.is_open()) return;
+        marisa::Keyset keyset;
+        std::string line;
+        while (std::getline(file, line)) {
+          if (line.empty() || line[0] == '#') continue;
+          size_t tab_pos = line.find('\t');
+          if (tab_pos != std::string::npos) {
+            std::string typo = line.substr(0, tab_pos);
+            std::string corrected = line.substr(tab_pos + 1);
+            if (!corrected.empty() && corrected.back() == '\r')
+              corrected.pop_back();
+            if (!typo.empty() && typo.back() == '\r') typo.pop_back();
+            if (!typo.empty() && !corrected.empty()) {
+              std::string merged_key = typo + "\t" + corrected;
+              keyset.push_back(merged_key.c_str(), merged_key.length());
+            }
           }
         }
-      }
-      file.close();
+        file.close();
 
-      if (keyset.num_keys() > 0) {
-        std::string build_dir = user_dir + "/build";
+        if (keyset.num_keys() == 0) return;
+
+        std::string build_dir =
+            bin_path.substr(0, bin_path.find_last_of("/\\"));
         struct stat st;
         if (stat(build_dir.c_str(), &st) == -1) {
 #ifdef _WIN32
@@ -290,12 +305,28 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
         }
         marisa::Trie new_trie;
         new_trie.build(keyset);
-        new_trie.save(user_bin.c_str());
-        LOG(INFO) << "TypoFilter: Compiled successfully to: " << user_bin;
-      }
+        new_trie.save(bin_path.c_str());
+        LOG(INFO) << "TypoFilter: Compiled successfully to: " << bin_path;
+      };
+
+  // user_txt > shared_txt → user_bin
+  if (IsTxtNewerThanBin(user_txt, user_bin)) {
+    jit_compile(user_txt, user_bin, "user");
+  } else if (IsTxtNewerThanBin(shared_txt, user_bin)) {
+    jit_compile(shared_txt, user_bin, "shared");
+  }
+
+  // common_txt → common_bin
+  std::string common_dir = deployer.common_data_dir.string();
+  if (!common_dir.empty()) {
+    std::string common_txt = common_dir + "/typo/" + base_name + ".txt";
+    std::string common_bin = common_dir + "/typo/" + base_name + ".bin";
+    if (IsTxtNewerThanBin(common_txt, common_bin)) {
+      jit_compile(common_txt, common_bin, "common");
     }
   }
 
+  // load: user_bin → shared_bin → common_bin
   try {
     trie_.mmap(user_bin.c_str());
     trie_loaded_ = true;
@@ -306,7 +337,18 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
       trie_loaded_ = true;
       LOG(INFO) << "TypoFilter: Loaded shared binary: " << shared_bin;
     } catch (...) {
-      LOG(WARNING) << "TypoFilter: Failed to map binary for: " << base_name;
+      if (!common_dir.empty()) {
+        try {
+          std::string common_bin = common_dir + "/typo/" + base_name + ".bin";
+          trie_.mmap(common_bin.c_str());
+          trie_loaded_ = true;
+          LOG(INFO) << "TypoFilter: Loaded common binary: " << common_bin;
+        } catch (...) {
+          LOG(WARNING) << "TypoFilter: Failed to map binary for: " << base_name;
+        }
+      } else {
+        LOG(WARNING) << "TypoFilter: Failed to map binary for: " << base_name;
+      }
     }
   }
 }
@@ -557,18 +599,7 @@ an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* ca
 
   return New<WeightedTypoTranslation>(translation, corrected_translation, start, raw_input.length(),
                                       override_mode, show_corrected_preedit_, original_preedit,
-                                      raw_segment, delimiters);
+                                      raw_segment, delimiters, correction_hint_);
 }
-
-TypoTranslation::TypoTranslation(an<Translation> original, an<Translation> corrected, size_t start, size_t end,
-                                 bool exclusive_override, bool show_corrected_preedit,
-                                 const std::string& original_preedit, const std::string& raw_segment)
-    : original_(original), corrected_(corrected), start_(start), end_(end),
-      original_preedit_(original_preedit), raw_segment_(raw_segment),
-      show_corrected_preedit_(show_corrected_preedit) {}
-
-bool TypoTranslation::Next() { return false; }
-an<Candidate> TypoTranslation::Peek() { return nullptr; }
-void TypoTranslation::EvaluateState() {}
 
 }  // namespace rime

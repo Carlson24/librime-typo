@@ -36,42 +36,8 @@ class TypoFilter : public Filter {
 
   bool is_enabled_ = false;
   bool show_corrected_preedit_ = false;
+  std::string correction_hint_;
   an<Translator> translator_;
-};
-
-class TypoTranslation : public Translation {
- public:
-  TypoTranslation(an<Translation> original, an<Translation> corrected,
-                  size_t start, size_t end, bool exclusive_override,
-                  bool show_corrected_preedit, const std::string& original_preedit,
-                  const std::string& raw_segment);
-
-  virtual ~TypoTranslation() = default;
-
-  virtual bool Next() override;
-  virtual an<Candidate> Peek() override;
-
- private:
-  enum class State {
-    kExclusiveOverride,
-    kYieldOriginalFirst,
-    kYieldCorrectedShadow,
-    kYieldOriginalRemaining,
-    kExhausted
-  };
-
-  void EvaluateState();
-
-  an<Translation> original_;
-  an<Translation> corrected_;
-  size_t start_;
-  size_t end_;
-  std::string original_preedit_;
-  std::string raw_segment_;
-  bool show_corrected_preedit_;
-
-  State state_;
-  double reference_quality_ = 0.0;
 };
 
 }  // namespace rime
