@@ -218,6 +218,7 @@ TypoFilter::TypoFilter(const Ticket& ticket) : Filter(ticket) {
 
   is_enabled_ = true;
   LoadCorrections(ticket.engine, input_type, custom_file);
+  config->GetInt("typo/max_scan_len", &max_scan_len_);
 }
 
 std::string TypoFilter::DetectInputType(Config* config) const {
@@ -365,7 +366,6 @@ std::string TypoFilter::GetCorrectedInput(const std::string& input, int& correct
 
   std::string corrected = "";
   bool has_correction = false;
-  const size_t MAX_SCAN_LEN = 20;
 
   for (char c : input) {
     corrected += c;
@@ -377,7 +377,7 @@ std::string TypoFilter::GetCorrectedInput(const std::string& input, int& correct
     }
     if (!is_pinyin && clean_corrected.length() % 2 != 0) continue;
 
-    for (size_t scan_len = std::min(tail_len, MAX_SCAN_LEN); scan_len >= 1; --scan_len) {
+    for (size_t scan_len = std::min(tail_len, static_cast<size_t>(max_scan_len_)); scan_len >= 1; --scan_len) {
       std::string scan_input = corrected.substr(tail_len - scan_len);
 
       // 剥离手敲的分隔符（如 '），得到纯字母用于查库
@@ -400,20 +400,25 @@ std::string TypoFilter::GetCorrectedInput(const std::string& input, int& correct
           bool valid = true;
 
           if (!is_pinyin) {
-            valid = false;
-            Segment seg_corr(0, target_corrected.length());
-            seg_corr.tags.insert(segment_tag);
-            auto trans_corr = translator_->Query(target_corrected, seg_corr);
-            std::string type_corr = "";
-            if (trans_corr && !trans_corr->exhausted()) {
-              if (auto c = trans_corr->Peek()) {
-                type_corr = c->type();
-                // 记录局部的真汉字词（用于随后的长句印证防爆）
-                if (type_corr == "phrase" || type_corr == "user_phrase") {
-                  valid = true;
-                  out_local_text = c->text();
+            auto cache_it = query_cache_.find(target_corrected);
+            if (cache_it != query_cache_.end()) {
+              valid = cache_it->second.first;
+              out_local_text = cache_it->second.second;
+            } else {
+              valid = false;
+              Segment seg_corr(0, target_corrected.length());
+              seg_corr.tags.insert(segment_tag);
+              auto trans_corr = translator_->Query(target_corrected, seg_corr);
+              if (trans_corr && !trans_corr->exhausted()) {
+                if (auto c = trans_corr->Peek()) {
+                  std::string type_corr = c->type();
+                  if (type_corr == "phrase" || type_corr == "user_phrase") {
+                    valid = true;
+                    out_local_text = c->text();
+                  }
                 }
               }
+              query_cache_[target_corrected] = {valid, out_local_text};
             }
           }
 

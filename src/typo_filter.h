@@ -8,6 +8,7 @@
 #include <rime/config.h>
 #include <marisa.h>
 #include <string>
+#include <unordered_map>
 
 namespace rime {
 
@@ -38,6 +39,9 @@ class TypoFilter : public Filter {
   bool show_corrected_preedit_ = false;
   std::string correction_hint_;
   an<Translator> translator_;
+  int max_scan_len_ = 20;
+
+  mutable std::unordered_map<std::string, std::pair<bool, std::string>> query_cache_;
 };
 
 }  // namespace rime
