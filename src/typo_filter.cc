@@ -200,7 +200,6 @@ TypoFilter::TypoFilter(const Ticket& ticket) : Filter(ticket) {
   if (!ticket.engine || !ticket.schema || !ticket.schema->config()) return;
   Config* config = ticket.schema->config();
   config->GetBool("typo/show_corrected_preedit", &show_corrected_preedit_);
-  config->GetString("typo/correction_hint", &correction_hint_);
   std::string translator_ns = "translator";
   config->GetString("typo/translator", &translator_ns);
 
@@ -397,39 +396,11 @@ std::string TypoFilter::GetCorrectedInput(const std::string& input, int& correct
         size_t tab_pos = found_key.find('\t');
         if (tab_pos != std::string::npos) {
           std::string target_corrected = found_key.substr(tab_pos + 1);
-          bool valid = true;
-
-          if (!is_pinyin) {
-            auto cache_it = query_cache_.find(target_corrected);
-            if (cache_it != query_cache_.end()) {
-              valid = cache_it->second.first;
-              out_local_text = cache_it->second.second;
-            } else {
-              valid = false;
-              Segment seg_corr(0, target_corrected.length());
-              seg_corr.tags.insert(segment_tag);
-              auto trans_corr = translator_->Query(target_corrected, seg_corr);
-              if (trans_corr && !trans_corr->exhausted()) {
-                if (auto c = trans_corr->Peek()) {
-                  std::string type_corr = c->type();
-                  if (type_corr == "phrase" || type_corr == "user_phrase") {
-                    valid = true;
-                    out_local_text = c->text();
-                  }
-                }
-              }
-              query_cache_[target_corrected] = {valid, out_local_text};
-            }
-          }
-
-          if (valid) {
-            // 跨越替换：把包含错误分隔符的尾段一起吃掉，换成干净的正确编码
-            corrected = corrected.substr(0, tail_len - scan_len) + target_corrected;
-            has_correction = true;
-            correction_count++;
-            if (scan_len > max_correction_len) max_correction_len = scan_len;
-            break;
-          }
+          corrected = corrected.substr(0, tail_len - scan_len) + target_corrected;
+          has_correction = true;
+          correction_count++;
+          if (scan_len > max_correction_len) max_correction_len = scan_len;
+          break;
         }
       }
     }
@@ -480,7 +451,9 @@ an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* ca
   std::string corrected_input = GetCorrectedInput(raw_input, correction_count, max_correction_len,
                                                   segment_tag, is_pinyin, local_corr_text, delimiters);
 
-  if (corrected_input.empty() || corrected_input == raw_input) return translation;
+  if (corrected_input.empty() || corrected_input == raw_input) {
+    return translation;
+  }
 
   bool original_failed = translation->exhausted();
 
@@ -513,12 +486,10 @@ an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* ca
   std::string corr_type = "";
   double corr_quality = 0.0;
   bool is_single_syllable = false;
-  std::string global_corr_text = ""; // 接收全局翻译结果
 
   if (auto c = corrected_translation->Peek()) {
     corr_type = c->type();
     corr_quality = c->quality();
-    global_corr_text = c->text();
 
     std::string text = c->text();
     size_t utf8_char_count = 0;
@@ -560,15 +531,6 @@ an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* ca
     bool orig_is_word = (orig_type == "phrase" || orig_type == "user_phrase");
     bool corr_is_word = (corr_type == "phrase" || corr_type == "user_phrase");
 
-    // 局部词必须在当前长度生成的全局整句中成功对齐:加一个逻辑,加一个立即，gelo>geli但没有最终用到句子中
-    // 只要查找不到，说明发生了跨音节拆分导致的语义坍塌，立即执行抑制，退回原版首选
-    // 当用户按 Backspace 回删，只要再次满足对齐，该纠错词会瞬间在生命周期中被再次激活。
-    if (!local_corr_text.empty() && !global_corr_text.empty()) {
-      if (global_corr_text.find(local_corr_text) == std::string::npos) {
-        return translation;
-      }
-    }
-
     if (correction_count >= 2) {
       override_mode = 2; // 发生两次以上的纠错连招，直接踢掉原版
     }
@@ -603,8 +565,8 @@ an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* ca
   }
 
   return New<WeightedTypoTranslation>(translation, corrected_translation, start, raw_input.length(),
-                                      override_mode, show_corrected_preedit_, original_preedit,
-                                      raw_segment, delimiters, correction_hint_);
+                                       override_mode, show_corrected_preedit_, original_preedit,
+                                       raw_segment, delimiters, "");
 }
 
 }  // namespace rime
