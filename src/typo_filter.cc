@@ -316,17 +316,7 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
     jit_compile(shared_txt, user_bin, "shared");
   }
 
-  // common_txt → common_bin
-  std::string common_dir = deployer.common_data_dir.string();
-  if (!common_dir.empty()) {
-    std::string common_txt = common_dir + "/typo/" + base_name + ".txt";
-    std::string common_bin = common_dir + "/typo/" + base_name + ".bin";
-    if (IsTxtNewerThanBin(common_txt, common_bin)) {
-      jit_compile(common_txt, common_bin, "common");
-    }
-  }
-
-  // load: user_bin → shared_bin → common_bin
+  // load: user_bin → shared_bin
   try {
     trie_.mmap(user_bin.c_str());
     trie_loaded_ = true;
@@ -337,18 +327,7 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
       trie_loaded_ = true;
       LOG(INFO) << "TypoFilter: Loaded shared binary: " << shared_bin;
     } catch (...) {
-      if (!common_dir.empty()) {
-        try {
-          std::string common_bin = common_dir + "/typo/" + base_name + ".bin";
-          trie_.mmap(common_bin.c_str());
-          trie_loaded_ = true;
-          LOG(INFO) << "TypoFilter: Loaded common binary: " << common_bin;
-        } catch (...) {
-          LOG(WARNING) << "TypoFilter: Failed to map binary for: " << base_name;
-        }
-      } else {
-        LOG(WARNING) << "TypoFilter: Failed to map binary for: " << base_name;
-      }
+      LOG(WARNING) << "TypoFilter: Failed to map binary for: " << base_name;
     }
   }
 }
