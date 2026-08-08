@@ -262,8 +262,8 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
 
   std::string user_txt = user_dir + "/" + base_name + ".txt";
   std::string user_bin = user_dir + "/build/" + base_name + ".bin";
-  std::string shared_txt = shared_dir + "/" + base_name + ".txt";
-  std::string shared_bin = shared_dir + "/build/" + base_name + ".bin";
+  std::string shared_txt = shared_dir + "/typo/" + base_name + ".txt";
+  std::string shared_bin = shared_dir + "/typo/build/" + base_name + ".bin";
 
   auto jit_compile =
       [&](const std::string& txt_path, const std::string& bin_path,
