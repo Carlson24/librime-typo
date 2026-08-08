@@ -271,7 +271,11 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
         LOG(INFO) << "TypoFilter: JIT Compiling " << label
                   << " dictionary: " << txt_path;
         std::ifstream file(txt_path);
-        if (!file.is_open()) return;
+        if (!file.is_open()) {
+          LOG(WARNING) << "TypoFilter: Failed to open " << label
+                       << " dictionary: " << txt_path;
+          return false;
+        }
         marisa::Keyset keyset;
         std::string line;
         while (std::getline(file, line)) {
@@ -291,7 +295,11 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
         }
         file.close();
 
-        if (keyset.num_keys() == 0) return;
+        if (keyset.num_keys() == 0) {
+          LOG(WARNING) << "TypoFilter: Empty " << label
+                       << " dictionary: " << txt_path;
+          return false;
+        }
 
         std::string build_dir =
             bin_path.substr(0, bin_path.find_last_of("/\\"));
@@ -307,12 +315,14 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
         new_trie.build(keyset);
         new_trie.save(bin_path.c_str());
         LOG(INFO) << "TypoFilter: Compiled successfully to: " << bin_path;
+        return true;
       };
 
-  // user_txt > shared_txt → user_bin
+  bool compiled = false;
   if (IsTxtNewerThanBin(user_txt, user_bin)) {
-    jit_compile(user_txt, user_bin, "user");
-  } else if (IsTxtNewerThanBin(shared_txt, user_bin)) {
+    compiled = jit_compile(user_txt, user_bin, "user");
+  }
+  if (!compiled && IsTxtNewerThanBin(shared_txt, user_bin)) {
     jit_compile(shared_txt, user_bin, "shared");
   }
 
