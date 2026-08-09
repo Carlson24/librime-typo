@@ -26,26 +26,44 @@ namespace rime {
 
 // 自定义影子类：完美继承注释，同时强制接管 preedit 编码显示
 class TypoShadowCandidate : public ShadowCandidate {
-public:
-  TypoShadowCandidate(an<Candidate> item, const std::string& type, const std::string& text,
-                      const std::string& comment, bool inherit_comment, const std::string& custom_preedit)
+ public:
+  TypoShadowCandidate(an<Candidate> item,
+                      const std::string& type,
+                      const std::string& text,
+                      const std::string& comment,
+                      bool inherit_comment,
+                      const std::string& custom_preedit)
       : ShadowCandidate(item, type, text, comment, inherit_comment),
         custom_preedit_(custom_preedit) {}
 
   std::string preedit() const override { return custom_preedit_; }
-private:
+
+ private:
   std::string custom_preedit_;
 };
 
 // 动态排序候选流
 class WeightedTypoTranslation : public Translation {
-public:
-  WeightedTypoTranslation(an<Translation> original, an<Translation> corrected, size_t start, size_t end,
-                          int mode, bool show_preedit, const std::string& orig_preedit,
-                          const std::string& raw_seg, const std::string& delimiters,
+ public:
+  WeightedTypoTranslation(an<Translation> original,
+                          an<Translation> corrected,
+                          size_t start,
+                          size_t end,
+                          int mode,
+                          bool show_preedit,
+                          const std::string& orig_preedit,
+                          const std::string& raw_seg,
+                          const std::string& delimiters,
                           const std::string& hint)
-      : original_(original), corrected_(corrected), start_(start), end_(end), mode_(mode),
-        show_preedit_(show_preedit), orig_preedit_(orig_preedit), raw_seg_(raw_seg), delimiters_(delimiters),
+      : original_(original),
+        corrected_(corrected),
+        start_(start),
+        end_(end),
+        mode_(mode),
+        show_preedit_(show_preedit),
+        orig_preedit_(orig_preedit),
+        raw_seg_(raw_seg),
+        delimiters_(delimiters),
         hint_(hint) {
     if (mode_ == 2) {
       state_ = State::kExclusive;
@@ -59,62 +77,114 @@ public:
   }
 
   bool Next() override {
-    if (exhausted()) return false;
+    if (exhausted())
+      return false;
     switch (state_) {
-      case State::kExclusive: corrected_->Next(); break;
-      case State::kOriginalFirst: original_->Next(); state_ = State::kOriginalFirst_YieldCorrected; break;
-      case State::kOriginalFirst_YieldCorrected: state_ = State::kYieldOriginalRemaining; break;
-      case State::kCorrectedFirst: state_ = State::kCorrectedFirst_YieldOriginal; break;
-      case State::kCorrectedFirst_YieldOriginal: original_->Next(); state_ = State::kYieldOriginalRemaining; break;
-      case State::kYieldOriginalRemaining: original_->Next(); break;
-      case State::kExhausted: return false;
+      case State::kExclusive:
+        corrected_->Next();
+        break;
+      case State::kOriginalFirst:
+        original_->Next();
+        state_ = State::kOriginalFirst_YieldCorrected;
+        break;
+      case State::kOriginalFirst_YieldCorrected:
+        state_ = State::kYieldOriginalRemaining;
+        break;
+      case State::kCorrectedFirst:
+        state_ = State::kCorrectedFirst_YieldOriginal;
+        break;
+      case State::kCorrectedFirst_YieldOriginal:
+        original_->Next();
+        state_ = State::kYieldOriginalRemaining;
+        break;
+      case State::kYieldOriginalRemaining:
+        original_->Next();
+        break;
+      case State::kExhausted:
+        return false;
     }
     EvaluateState();
     return !exhausted();
   }
 
   an<Candidate> Peek() override {
-    if (exhausted()) return nullptr;
+    if (exhausted())
+      return nullptr;
     switch (state_) {
-      case State::kExclusive: return CreateShadow(corrected_->Peek(), true);
+      case State::kExclusive:
+        return CreateShadow(corrected_->Peek(), true);
       case State::kOriginalFirst:
       case State::kCorrectedFirst_YieldOriginal:
-      case State::kYieldOriginalRemaining: return original_->Peek();
+      case State::kYieldOriginalRemaining:
+        return original_->Peek();
       case State::kOriginalFirst_YieldCorrected:
-      case State::kCorrectedFirst: return CreateShadow(corrected_->Peek(), false);
-      case State::kExhausted: return nullptr;
+      case State::kCorrectedFirst:
+        return CreateShadow(corrected_->Peek(), false);
+      case State::kExhausted:
+        return nullptr;
     }
     return nullptr;
   }
 
-private:
+ private:
   enum class State {
-    kExclusive, kOriginalFirst, kOriginalFirst_YieldCorrected,
-    kCorrectedFirst, kCorrectedFirst_YieldOriginal, kYieldOriginalRemaining, kExhausted
+    kExclusive,
+    kOriginalFirst,
+    kOriginalFirst_YieldCorrected,
+    kCorrectedFirst,
+    kCorrectedFirst_YieldOriginal,
+    kYieldOriginalRemaining,
+    kExhausted
   };
 
   void EvaluateState() {
     while (state_ != State::kExhausted) {
       switch (state_) {
         case State::kExclusive:
-          if (corrected_ && !corrected_->exhausted()) { set_exhausted(false); return; }
-          state_ = State::kExhausted; break;
+          if (corrected_ && !corrected_->exhausted()) {
+            set_exhausted(false);
+            return;
+          }
+          state_ = State::kExhausted;
+          break;
         case State::kOriginalFirst:
-          if (original_ && !original_->exhausted()) { set_exhausted(false); return; }
-          state_ = State::kOriginalFirst_YieldCorrected; break;
+          if (original_ && !original_->exhausted()) {
+            set_exhausted(false);
+            return;
+          }
+          state_ = State::kOriginalFirst_YieldCorrected;
+          break;
         case State::kOriginalFirst_YieldCorrected:
-          if (corrected_ && !corrected_->exhausted()) { set_exhausted(false); return; }
-          state_ = State::kYieldOriginalRemaining; break;
+          if (corrected_ && !corrected_->exhausted()) {
+            set_exhausted(false);
+            return;
+          }
+          state_ = State::kYieldOriginalRemaining;
+          break;
         case State::kCorrectedFirst:
-          if (corrected_ && !corrected_->exhausted()) { set_exhausted(false); return; }
-          state_ = State::kCorrectedFirst_YieldOriginal; break;
+          if (corrected_ && !corrected_->exhausted()) {
+            set_exhausted(false);
+            return;
+          }
+          state_ = State::kCorrectedFirst_YieldOriginal;
+          break;
         case State::kCorrectedFirst_YieldOriginal:
-          if (original_ && !original_->exhausted()) { set_exhausted(false); return; }
-          state_ = State::kExhausted; break;
+          if (original_ && !original_->exhausted()) {
+            set_exhausted(false);
+            return;
+          }
+          state_ = State::kExhausted;
+          break;
         case State::kYieldOriginalRemaining:
-          if (original_ && !original_->exhausted()) { set_exhausted(false); return; }
-          state_ = State::kExhausted; break;
-        case State::kExhausted: set_exhausted(true); return;
+          if (original_ && !original_->exhausted()) {
+            set_exhausted(false);
+            return;
+          }
+          state_ = State::kExhausted;
+          break;
+        case State::kExhausted:
+          set_exhausted(true);
+          return;
       }
     }
     set_exhausted(true);
@@ -122,7 +192,8 @@ private:
 
   // 构建候选词并注入视觉提示
   an<Candidate> CreateShadow(an<Candidate> c, bool is_exclusive) {
-    if (!c) return nullptr;
+    if (!c)
+      return nullptr;
     std::string final_preedit = c->preedit();
 
     // 如果设置为 false，算回原始编码
@@ -130,12 +201,14 @@ private:
       if (is_exclusive) {
         size_t non_delim_count = 0;
         for (char ch : final_preedit) {
-          if (delimiters_.find(ch) == std::string::npos) non_delim_count++;
+          if (delimiters_.find(ch) == std::string::npos)
+            non_delim_count++;
         }
 
         size_t raw_non_delim_count = 0;
         for (char ch : raw_seg_) {
-          if (delimiters_.find(ch) == std::string::npos) raw_non_delim_count++;
+          if (delimiters_.find(ch) == std::string::npos)
+            raw_non_delim_count++;
         }
 
         if (non_delim_count == raw_non_delim_count) {
@@ -145,13 +218,16 @@ private:
             if (delimiters_.find(ch) != std::string::npos) {
               mapped += ch;
             } else {
-              while (idx < raw_seg_.length() && delimiters_.find(raw_seg_[idx]) != std::string::npos) {
+              while (idx < raw_seg_.length() &&
+                     delimiters_.find(raw_seg_[idx]) != std::string::npos) {
                 mapped += raw_seg_[idx++];
               }
-              if (idx < raw_seg_.length()) mapped += raw_seg_[idx++];
+              if (idx < raw_seg_.length())
+                mapped += raw_seg_[idx++];
             }
           }
-          while (idx < raw_seg_.length() && delimiters_.find(raw_seg_[idx]) != std::string::npos) {
+          while (idx < raw_seg_.length() &&
+                 delimiters_.find(raw_seg_[idx]) != std::string::npos) {
             mapped += raw_seg_[idx++];
           }
           final_preedit = mapped;
@@ -171,11 +247,13 @@ private:
     }
 
     if (is_exclusive) {
-      auto cand = New<TypoShadowCandidate>(c, c->type(), c->text(), c->comment(), true, final_preedit);
+      auto cand = New<TypoShadowCandidate>(c, c->type(), c->text(),
+                                           c->comment(), true, final_preedit);
       cand->set_quality(c->quality());
       return cand;
     } else {
-      auto cand = New<TypoShadowCandidate>(c, "typo", c->text(), hint_, false, final_preedit);
+      auto cand = New<TypoShadowCandidate>(c, "typo", c->text(), hint_, false,
+                                           final_preedit);
       cand->set_quality(c->quality());
       return cand;
     }
@@ -189,15 +267,19 @@ private:
   State state_;
 };
 
-static bool IsTxtNewerThanBin(const std::string& txt_path, const std::string& bin_path) {
+static bool IsTxtNewerThanBin(const std::string& txt_path,
+                              const std::string& bin_path) {
   struct stat txt_stat, bin_stat;
-  if (stat(bin_path.c_str(), &bin_stat) != 0) return true;
-  if (stat(txt_path.c_str(), &txt_stat) != 0) return false;
+  if (stat(bin_path.c_str(), &bin_stat) != 0)
+    return true;
+  if (stat(txt_path.c_str(), &txt_stat) != 0)
+    return false;
   return txt_stat.st_mtime > bin_stat.st_mtime;
 }
 
 TypoFilter::TypoFilter(const Ticket& ticket) : Filter(ticket) {
-  if (!ticket.engine || !ticket.schema || !ticket.schema->config()) return;
+  if (!ticket.engine || !ticket.schema || !ticket.schema->config())
+    return;
   Config* config = ticket.schema->config();
   config->GetBool("typo/show_corrected_preedit", &show_corrected_preedit_);
   std::string translator_ns = "translator";
@@ -205,15 +287,19 @@ TypoFilter::TypoFilter(const Ticket& ticket) : Filter(ticket) {
 
   Ticket t(ticket.engine, translator_ns);
   auto* comp = Translator::Require("script_translator");
-  if (comp) translator_.reset(comp->Create(t));
-  if (!translator_) return;
+  if (comp)
+    translator_.reset(comp->Create(t));
+  if (!translator_)
+    return;
 
   std::string input_type = "", custom_file = "";
   config->GetString("typo/input_type", &input_type);
   config->GetString("typo/custom_file", &custom_file);
 
-  if (input_type == "auto") input_type = DetectInputType(config);
-  if (input_type.empty() && custom_file.empty()) return;
+  if (input_type == "auto")
+    input_type = DetectInputType(config);
+  if (input_type.empty() && custom_file.empty())
+    return;
 
   is_enabled_ = true;
   LoadCorrections(ticket.engine, input_type, custom_file);
@@ -226,32 +312,41 @@ std::string TypoFilter::DetectInputType(Config* config) const {
   if (marker_map) {
     for (auto it = marker_map->begin(); it != marker_map->end(); ++it) {
       auto val = As<ConfigValue>(it->second);
-      if (val) markers[it->first] = val->str();
+      if (val)
+        markers[it->first] = val->str();
     }
   }
-  if (markers.empty()) return "";
+  if (markers.empty())
+    return "";
 
   an<ConfigList> algebra = config->GetList("speller/algebra");
-  if (!algebra) return "";
+  if (!algebra)
+    return "";
 
   for (size_t i = 0; i < algebra->size(); ++i) {
     auto val = As<ConfigValue>(algebra->GetAt(i));
-    if (!val) continue;
+    if (!val)
+      continue;
     std::string rule = val->str();
     for (const auto& pair : markers) {
       if (rule.find(pair.first) != std::string::npos) {
-          LOG(INFO) << "TypoFilter: Auto-detected input type: " << pair.second << " via marker: " << pair.first;
-          return pair.second;
+        LOG(INFO) << "TypoFilter: Auto-detected input type: " << pair.second
+                  << " via marker: " << pair.first;
+        return pair.second;
       }
     }
   }
   return "";
 }
 
-void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, const std::string& custom_file) {
-  std::string base_name = custom_file.empty() ? ("typo_" + input_type) : custom_file;
+void TypoFilter::LoadCorrections(Engine* engine,
+                                 const std::string& input_type,
+                                 const std::string& custom_file) {
+  std::string base_name =
+      custom_file.empty() ? ("typo_" + input_type) : custom_file;
 
-  if (current_key_ == base_name) return;
+  if (current_key_ == base_name)
+    return;
   current_key_ = base_name;
   trie_loaded_ = false;
   trie_.clear();
@@ -265,58 +360,59 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
   std::string shared_txt = shared_dir + "/typo/" + base_name + ".txt";
   std::string shared_bin = shared_dir + "/typo/build/" + base_name + ".bin";
 
-  auto jit_compile =
-      [&](const std::string& txt_path, const std::string& bin_path,
-          const std::string& label) {
-        LOG(INFO) << "TypoFilter: JIT Compiling " << label
-                  << " dictionary: " << txt_path;
-        std::ifstream file(txt_path);
-        if (!file.is_open()) {
-          LOG(WARNING) << "TypoFilter: Failed to open " << label
-                       << " dictionary: " << txt_path;
-          return false;
+  auto jit_compile = [&](const std::string& txt_path,
+                         const std::string& bin_path,
+                         const std::string& label) {
+    LOG(INFO) << "TypoFilter: JIT Compiling " << label
+              << " dictionary: " << txt_path;
+    std::ifstream file(txt_path);
+    if (!file.is_open()) {
+      LOG(WARNING) << "TypoFilter: Failed to open " << label
+                   << " dictionary: " << txt_path;
+      return false;
+    }
+    marisa::Keyset keyset;
+    std::string line;
+    while (std::getline(file, line)) {
+      if (line.empty() || line[0] == '#')
+        continue;
+      size_t tab_pos = line.find('\t');
+      if (tab_pos != std::string::npos) {
+        std::string typo = line.substr(0, tab_pos);
+        std::string corrected = line.substr(tab_pos + 1);
+        if (!corrected.empty() && corrected.back() == '\r')
+          corrected.pop_back();
+        if (!typo.empty() && typo.back() == '\r')
+          typo.pop_back();
+        if (!typo.empty() && !corrected.empty()) {
+          std::string merged_key = typo + "\t" + corrected;
+          keyset.push_back(merged_key.c_str(), merged_key.length());
         }
-        marisa::Keyset keyset;
-        std::string line;
-        while (std::getline(file, line)) {
-          if (line.empty() || line[0] == '#') continue;
-          size_t tab_pos = line.find('\t');
-          if (tab_pos != std::string::npos) {
-            std::string typo = line.substr(0, tab_pos);
-            std::string corrected = line.substr(tab_pos + 1);
-            if (!corrected.empty() && corrected.back() == '\r')
-              corrected.pop_back();
-            if (!typo.empty() && typo.back() == '\r') typo.pop_back();
-            if (!typo.empty() && !corrected.empty()) {
-              std::string merged_key = typo + "\t" + corrected;
-              keyset.push_back(merged_key.c_str(), merged_key.length());
-            }
-          }
-        }
-        file.close();
+      }
+    }
+    file.close();
 
-        if (keyset.num_keys() == 0) {
-          LOG(WARNING) << "TypoFilter: Empty " << label
-                       << " dictionary: " << txt_path;
-          return false;
-        }
+    if (keyset.num_keys() == 0) {
+      LOG(WARNING) << "TypoFilter: Empty " << label
+                   << " dictionary: " << txt_path;
+      return false;
+    }
 
-        std::string build_dir =
-            bin_path.substr(0, bin_path.find_last_of("/\\"));
-        struct stat st;
-        if (stat(build_dir.c_str(), &st) == -1) {
+    std::string build_dir = bin_path.substr(0, bin_path.find_last_of("/\\"));
+    struct stat st;
+    if (stat(build_dir.c_str(), &st) == -1) {
 #ifdef _WIN32
-          _mkdir(build_dir.c_str());
+      _mkdir(build_dir.c_str());
 #else
-          mkdir(build_dir.c_str(), 0755);
+      mkdir(build_dir.c_str(), 0755);
 #endif
-        }
-        marisa::Trie new_trie;
-        new_trie.build(keyset);
-        new_trie.save(bin_path.c_str());
-        LOG(INFO) << "TypoFilter: Compiled successfully to: " << bin_path;
-        return true;
-      };
+    }
+    marisa::Trie new_trie;
+    new_trie.build(keyset);
+    new_trie.save(bin_path.c_str());
+    LOG(INFO) << "TypoFilter: Compiled successfully to: " << bin_path;
+    return true;
+  };
 
   bool compiled = false;
   if (IsTxtNewerThanBin(user_txt, user_bin)) {
@@ -343,40 +439,64 @@ void TypoFilter::LoadCorrections(Engine* engine, const std::string& input_type, 
 }
 
 // 局部查询引擎（带汉字词提取，用于整句印证）
-std::string TypoFilter::GetCorrectedInput(const std::string& input, int& correction_count, size_t& max_correction_len,
-                                          const std::string& segment_tag, bool is_pinyin, std::string& out_local_text,
+std::string TypoFilter::GetCorrectedInput(const std::string& input,
+                                          int& correction_count,
+                                          size_t& max_correction_len,
+                                          const std::string& segment_tag,
+                                          bool is_pinyin,
+                                          std::string& out_local_text,
                                           const std::string& delimiters) const {
   correction_count = 0;
   max_correction_len = 0;
   out_local_text = "";
-  if (!trie_loaded_ || input.empty() || !translator_) return "";
-  if (segment_tag.empty()) return "";
+  if (!trie_loaded_ || input.empty() || !translator_)
+    return "";
+  if (segment_tag.empty())
+    return "";
 
   std::string corrected = "";
   bool has_correction = false;
 
+  int step = 0;
   for (char c : input) {
     corrected += c;
     size_t tail_len = corrected.length();
 
     std::string clean_corrected = "";
     for (char ch : corrected) {
-      if (delimiters.find(ch) == std::string::npos) clean_corrected += ch;
+      if (delimiters.find(ch) == std::string::npos)
+        clean_corrected += ch;
     }
-    if (!is_pinyin && clean_corrected.length() % 2 != 0) continue;
+    DLOG(INFO) << "typo step=" << step << " ch='" << c << "' corrected='"
+               << corrected << "' clean_len=" << clean_corrected.length()
+               << " tail_len=" << tail_len;
+    if (!is_pinyin && clean_corrected.length() % 2 != 0) {
+      DLOG(INFO) << "typo step=" << step
+                 << " SKIP odd clean_len=" << clean_corrected.length();
+      ++step;
+      continue;
+    }
 
-    for (size_t scan_len = std::min(tail_len, static_cast<size_t>(max_scan_len_)); scan_len >= 1; --scan_len) {
+    bool found_any = false;
+    for (size_t scan_len =
+             std::min(tail_len, static_cast<size_t>(max_scan_len_));
+         scan_len >= 1; --scan_len) {
       std::string scan_input = corrected.substr(tail_len - scan_len);
 
       // 剥离手敲的分隔符（如 '），得到纯字母用于查库
       std::string clean_scan_input = "";
       for (char ch : scan_input) {
-        if (delimiters.find(ch) == std::string::npos) clean_scan_input += ch;
+        if (delimiters.find(ch) == std::string::npos)
+          clean_scan_input += ch;
       }
-      if (!is_pinyin && clean_scan_input.length() % 2 != 0) continue;
-      if (clean_scan_input.empty()) continue;
+      if (!is_pinyin && clean_scan_input.length() % 2 != 0)
+        continue;
+      if (clean_scan_input.empty())
+        continue;
 
-      std::string query_prefix = clean_scan_input + "\t"; // 拿纯字母去查树
+      DLOG(INFO) << "typo step=" << step << " scan_len=" << scan_len
+                 << " scan_input='" << clean_scan_input << "'";
+      std::string query_prefix = clean_scan_input + "\t";  // 拿纯字母去查树
       marisa::Agent agent;
       agent.set_query(query_prefix.c_str());
 
@@ -385,64 +505,99 @@ std::string TypoFilter::GetCorrectedInput(const std::string& input, int& correct
         size_t tab_pos = found_key.find('\t');
         if (tab_pos != std::string::npos) {
           std::string target_corrected = found_key.substr(tab_pos + 1);
-          corrected = corrected.substr(0, tail_len - scan_len) + target_corrected;
+          std::string old_corrected = corrected;
+          corrected =
+              corrected.substr(0, tail_len - scan_len) + target_corrected;
+          DLOG(INFO) << "typo step=" << step << " MATCH! '" << clean_scan_input
+                     << "' -> '" << found_key << "' replacing tail, before='"
+                     << old_corrected << "' after='" << corrected << "'";
           has_correction = true;
           correction_count++;
-          if (scan_len > max_correction_len) max_correction_len = scan_len;
+          if (scan_len > max_correction_len)
+            max_correction_len = scan_len;
+          found_any = true;
           break;
         }
       }
     }
+    if (!found_any)
+      DLOG(INFO) << "typo step=" << step << " no match";
+    ++step;
   }
+  DLOG(INFO) << "typo GetCorrectedInput FINAL: has_correction="
+             << has_correction << " corrected='"
+             << (has_correction ? corrected : "(unchanged)")
+             << "' correction_count=" << correction_count;
   return has_correction ? corrected : "";
 }
 
 // 全局决策引擎
-an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* candidates) {
-  if (!is_enabled_ || !engine_ || !translation || !translator_) return translation;
+an<Translation> TypoFilter::Apply(an<Translation> translation,
+                                  CandidateList* candidates) {
+  if (!is_enabled_ || !engine_ || !translation || !translator_)
+    return translation;
 
   Context* ctx = engine_->context();
-  if (!ctx || !ctx->get_option("corrector")) return translation;
+  if (!ctx || !ctx->get_option("corrector"))
+    return translation;
 
   std::string raw_input = ctx->input();
-  if (raw_input.empty()) return translation;
+  if (raw_input.empty())
+    return translation;
 
   std::string delimiters = " '";
-  an<ConfigValue> delim_conf = engine_->schema()->config()->GetValue("speller/delimiter");
+  an<ConfigValue> delim_conf =
+      engine_->schema()->config()->GetValue("speller/delimiter");
   if (delim_conf && !delim_conf->str().empty()) {
     delimiters = delim_conf->str();
   }
 
   std::string itype;
   engine_->schema()->config()->GetString("typo/input_type", &itype);
-  if (itype == "auto") itype = DetectInputType(engine_->schema()->config());
+  if (itype == "auto")
+    itype = DetectInputType(engine_->schema()->config());
 
   bool is_pinyin = (itype == "pinyin");
 
   std::string segment_tag = "";
   if (!ctx->composition().empty()) {
     const auto& tags = ctx->composition().back().tags;
-    if (!tags.empty()) segment_tag = *tags.begin();
+    if (!tags.empty())
+      segment_tag = *tags.begin();
   }
   if (segment_tag.empty()) {
-    an<ConfigList> custom_tags = engine_->schema()->config()->GetList("typo/tags");
+    an<ConfigList> custom_tags =
+        engine_->schema()->config()->GetList("typo/tags");
     if (custom_tags && custom_tags->size() > 0) {
       auto val = As<ConfigValue>(custom_tags->GetAt(0));
-      if (val) segment_tag = val->str();
+      if (val)
+        segment_tag = val->str();
     }
-    if (segment_tag.empty()) segment_tag = "abc";
+    if (segment_tag.empty())
+      segment_tag = "abc";
   }
 
   int correction_count = 0;
   size_t max_correction_len = 0;
-  std::string local_corr_text = ""; // 接收局部提取的汉字
+  std::string local_corr_text = "";  // 接收局部提取的汉字
 
-  std::string corrected_input = GetCorrectedInput(raw_input, correction_count, max_correction_len,
-                                                  segment_tag, is_pinyin, local_corr_text, delimiters);
+  DLOG(INFO) << "typo Apply enter: raw_input='" << raw_input
+             << "' is_pinyin=" << is_pinyin << " segment_tag='" << segment_tag
+             << "'";
+  std::string corrected_input =
+      GetCorrectedInput(raw_input, correction_count, max_correction_len,
+                        segment_tag, is_pinyin, local_corr_text, delimiters);
 
   if (corrected_input.empty() || corrected_input == raw_input) {
+    DLOG(INFO) << "typo Apply SKIP: corrected_input.empty="
+               << corrected_input.empty()
+               << " same_as_raw=" << (corrected_input == raw_input)
+               << " -> return original translation";
     return translation;
   }
+  DLOG(INFO) << "typo Apply CORRECTED: raw='" << raw_input << "' -> corrected='"
+             << corrected_input << "' count=" << correction_count
+             << " max_len=" << max_correction_len;
 
   bool original_failed = translation->exhausted();
 
@@ -455,11 +610,15 @@ an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* ca
   bool is_partial_match = (end < raw_input.length());
 
   Segment seg(0, corrected_input.length());
-  if (!ctx->composition().empty()) seg.tags = ctx->composition().back().tags;
-  if (seg.tags.empty()) return translation;
+  if (!ctx->composition().empty())
+    seg.tags = ctx->composition().back().tags;
+  if (seg.tags.empty())
+    return translation;
 
-  an<Translation> corrected_translation = translator_->Query(corrected_input, seg);
-  if (!corrected_translation || (corrected_translation->exhausted() && !original_failed)) {
+  an<Translation> corrected_translation =
+      translator_->Query(corrected_input, seg);
+  if (!corrected_translation ||
+      (corrected_translation->exhausted() && !original_failed)) {
     return translation;
   }
 
@@ -482,57 +641,50 @@ an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* ca
 
     std::string text = c->text();
     size_t utf8_char_count = 0;
-    for (char ch : text) if ((ch & 0xC0) != 0x80) utf8_char_count++;
-    if (utf8_char_count == 1) is_single_syllable = true;
+    for (char ch : text)
+      if ((ch & 0xC0) != 0x80)
+        utf8_char_count++;
+    if (utf8_char_count == 1)
+      is_single_syllable = true;
   }
 
   int override_mode = 0;
 
   if (original_failed || is_partial_match) {
-    override_mode = 2; // 原版废码，无条件纠错独占救场
-  }
-  else if (is_pinyin) {
+    override_mode = 2;  // 原版废码，无条件纠错独占救场
+  } else if (is_pinyin) {
     // 全拼 (Pinyin) 核心规则
     bool corr_is_word = (corr_type == "phrase" || corr_type == "user_phrase");
 
     if (raw_input.length() <= 3) {
-      override_mode = 0; // 3码以下纠错必次选
+      override_mode = 0;  // 3码以下纠错必次选
     } else {
       if (orig_type == "sentence" && corr_is_word) {
-        override_mode = 2; // 破句子被真词碾压，独占
-      }
-      else if (raw_input.length() > 4 && corr_quality > orig_quality) {
-        override_mode = 1; // 纠错得分高，抢占第一
-      }
-      else if (is_single_syllable && max_correction_len >= 4) {
-        override_mode = 2; // 单音节精准越权
-      }
-      else if (correction_count >= 2) {
-        override_mode = 2; // 连环错越权
-      }
-      else {
+        override_mode = 2;  // 破句子被真词碾压，独占
+      } else if (raw_input.length() > 4 && corr_quality > orig_quality) {
+        override_mode = 1;  // 纠错得分高，抢占第一
+      } else if (is_single_syllable && max_correction_len >= 4) {
+        override_mode = 2;  // 单音节精准越权
+      } else if (correction_count >= 2) {
+        override_mode = 2;  // 连环错越权
+      } else {
         override_mode = 0;
       }
     }
-  }
-  else {
+  } else {
     // 双拼 (真值表决战与动态生命周期印证)
     bool orig_is_word = (orig_type == "phrase" || orig_type == "user_phrase");
     bool corr_is_word = (corr_type == "phrase" || corr_type == "user_phrase");
 
     if (correction_count >= 2) {
-      override_mode = 2; // 发生两次以上的纠错连招，直接踢掉原版
-    }
-    else if (orig_is_word && !corr_is_word) {
-      return translation; // 原版是词，纠错变句，属于误杀
-    }
-    else if (!orig_is_word && corr_is_word) {
-      override_mode = 2; // 原版是句，纠错真词，碾压
-    }
-    else if (orig_is_word && corr_is_word) {
-      override_mode = 0; // 如果大家都是词，尊重原版第一，纠错屈居次选
-    }
-    else {
+      override_mode = 2;  // 发生两次以上的纠错连招，直接踢掉原版
+    } else if (orig_is_word && !corr_is_word) {
+      return translation;  // 原版是词，纠错变句，属于误杀
+    } else if (!orig_is_word && corr_is_word) {
+      override_mode = 2;  // 原版是句，纠错真词，碾压
+    } else if (orig_is_word && corr_is_word) {
+      override_mode = 0;  // 如果大家都是词，尊重原版第一，纠错屈居次选
+    } else {
       // 如果都是拼凑出的长句（模型作用下质量通常同为 0.0），平局原版赢
       if (corr_quality > orig_quality) {
         override_mode = 1;
@@ -542,20 +694,24 @@ an<Translation> TypoFilter::Apply(an<Translation> translation, CandidateList* ca
     }
   }
 
-  std::string raw_segment = (end > start && end <= raw_input.length()) ?
-                            raw_input.substr(start, end - start) : raw_input;
+  std::string raw_segment = (end > start && end <= raw_input.length())
+                                ? raw_input.substr(start, end - start)
+                                : raw_input;
   std::string original_preedit = "";
 
   if (override_mode != 2) {
     if (!original_failed) {
-      if (auto orig_c = translation->Peek()) original_preedit = orig_c->preedit();
+      if (auto orig_c = translation->Peek())
+        original_preedit = orig_c->preedit();
     }
-    if (original_preedit.empty()) original_preedit = raw_segment;
+    if (original_preedit.empty())
+      original_preedit = raw_segment;
   }
 
-  return New<WeightedTypoTranslation>(translation, corrected_translation, start, raw_input.length(),
-                                       override_mode, show_corrected_preedit_, original_preedit,
-                                       raw_segment, delimiters, "");
+  return New<WeightedTypoTranslation>(translation, corrected_translation, start,
+                                      raw_input.length(), override_mode,
+                                      show_corrected_preedit_, original_preedit,
+                                      raw_segment, delimiters, "");
 }
 
 }  // namespace rime

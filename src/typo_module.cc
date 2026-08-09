@@ -12,7 +12,6 @@ static void rime_typo_initialize() {
   r.Register("typo_filter", new Component<TypoFilter>);
 }
 
-static void rime_typo_finalize() {
-}
+static void rime_typo_finalize() {}
 
 RIME_REGISTER_MODULE(typo)

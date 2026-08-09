@@ -20,12 +20,16 @@ class TypoFilter : public Filter {
                                 CandidateList* candidates) override;
 
  private:
-  std::string GetCorrectedInput(const std::string& input, int& correction_count,
-                                size_t& max_correction_len, const std::string& segment_tag,
-                                bool is_pinyin, std::string& out_local_text,
+  std::string GetCorrectedInput(const std::string& input,
+                                int& correction_count,
+                                size_t& max_correction_len,
+                                const std::string& segment_tag,
+                                bool is_pinyin,
+                                std::string& out_local_text,
                                 const std::string& delimiters) const;
 
-  void LoadCorrections(Engine* engine, const std::string& input_type,
+  void LoadCorrections(Engine* engine,
+                       const std::string& input_type,
                        const std::string& custom_file);
 
   std::string DetectInputType(Config* config) const;
